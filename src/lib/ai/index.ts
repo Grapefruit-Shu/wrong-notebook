@@ -2,6 +2,7 @@ import { AIService } from "./types";
 import { GeminiProvider } from "./gemini-provider";
 import { OpenAIProvider } from "./openai-provider";
 import { AzureOpenAIProvider } from "./azure-provider";
+import { ZhipuProvider } from "./zhipu-provider";
 
 export * from "./types";
 
@@ -22,6 +23,9 @@ export function getAIService(): AIService {
     } else if (provider === "azure") {
         logger.info({ deployment: config.azure?.deploymentName }, 'Using Azure OpenAI Provider');
         return new AzureOpenAIProvider(config.azure);
+    } else if (provider === "zhipu") {
+        logger.info({ model: config.zhipu?.model }, 'Using Zhipu AI Provider');
+        return new ZhipuProvider(config.zhipu);
     } else {
         logger.info('Using Gemini Provider');
         return new GeminiProvider(config.gemini);

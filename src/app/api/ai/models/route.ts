@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
         }
 
         // Only OpenAI-compatible APIs support /v1/models
-        if (provider !== 'openai') {
+        if (provider !== 'openai' && provider !== 'zhipu') {
             return NextResponse.json(
                 {
                     error: 'Gemini原生API不支持模型列表功能。如果您使用OpenAI兼容的代理服务，请选择"OpenAI / Compatible"作为提供商。',
@@ -34,7 +34,11 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        const url = `${baseUrl || 'https://api.openai.com/v1'}/models`;
+        // Determine base URL based on provider
+        const defaultBaseUrl = provider === 'zhipu'
+            ? 'https://open.bigmodel.cn/api/paas/v4'
+            : 'https://api.openai.com/v1';
+        const url = `${baseUrl || defaultBaseUrl}/models`;
 
         const response = await fetch(url, {
             headers: {

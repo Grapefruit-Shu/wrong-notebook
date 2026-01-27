@@ -1,0 +1,58 @@
+# Docker Compose for local build and deployment
+# Usage:
+#   docker compose -f docker-compose.local.yml build
+#   docker compose -f docker-compose.local.yml up -d
+
+version: '3.8'
+
+services:
+  wrong-notebook:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wrong-notebook:local
+    container_name: wrong-notebook-local
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # NextAuth 配置 - 请根据需要修改
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=change_this_to_a_secure_random_string
+
+      # AI 提供商配置 (可选，也可以在 Web UI 中配置)
+      # - AI_PROVIDER=gemini
+      # - GOOGLE_API_KEY=your_gemini_api_key
+      # - OPENAI_API_KEY=your_openai_api_key
+      # - ZHIPU_API_KEY=your_zhipu_api_key
+
+      # 数据库配置 (SQLite 持久化路径)
+      - DATABASE_URL=file:/app/data/dev.db
+
+      # 其他环境变量
+      - NODE_ENV=production
+      - AUTH_TRUST_HOST=true
+
+    volumes:
+      # 持久化 SQLite 数据库
+      - ./data:/app/data
+      # 持久化配置文件
+      - ./config:/app/config
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:
+  config:

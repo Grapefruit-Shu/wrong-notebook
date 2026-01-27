@@ -474,6 +474,19 @@ export function SettingsDialog() {
                     model: config.azure.model,
                     language: language
                 };
+            } else if (config.aiProvider === 'zhipu') {
+                if (!config.zhipu?.apiKey) {
+                    setTestResult({ success: false, textSupport: false, visionSupport: false, textError: t.settings?.ai?.validationApiKeyRequired || 'API Key is required' });
+                    setTesting(false);
+                    return;
+                }
+                requestBody = {
+                    provider: 'zhipu',
+                    apiKey: config.zhipu.apiKey,
+                    baseUrl: config.zhipu.baseUrl,
+                    model: config.zhipu.model,
+                    language: language
+                };
             } else {
                 setTesting(false);
                 return;
@@ -755,7 +768,7 @@ export function SettingsDialog() {
                                     <Label>{t.settings?.tabs?.ai || "AI Provider"}</Label>
                                     <Select
                                         value={config.aiProvider}
-                                        onValueChange={(val: 'gemini' | 'openai' | 'azure') => setConfig(prev => ({ ...prev, aiProvider: val }))}
+                                        onValueChange={(val: 'gemini' | 'openai' | 'azure' | 'zhipu') => setConfig(prev => ({ ...prev, aiProvider: val }))}
                                     >
                                         <SelectTrigger>
                                             <SelectValue />
@@ -764,6 +777,7 @@ export function SettingsDialog() {
                                             <SelectItem value="gemini">Google Gemini</SelectItem>
                                             <SelectItem value="openai">OpenAI / Compatible</SelectItem>
                                             <SelectItem value="azure">Azure OpenAI</SelectItem>
+                                            <SelectItem value="zhipu">智谱 AI (Zhipu GLM)</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -995,6 +1009,57 @@ export function SettingsDialog() {
                                                 onChange={(e) => setConfig(prev => ({ ...prev, azure: { ...prev.azure, model: e.target.value } }))}
                                                 placeholder="gpt-4o"
                                             />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {config.aiProvider === 'zhipu' && (
+                                    <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                                        <div className="space-y-2">
+                                            <Label>API Key <span className="text-destructive">*</span></Label>
+                                            <div className="relative">
+                                                <Input
+                                                    type={showApiKey ? "text" : "password"}
+                                                    value={config.zhipu?.apiKey || ''}
+                                                    onChange={(e) => setConfig(prev => ({ ...prev, zhipu: { ...prev.zhipu, apiKey: e.target.value } }))}
+                                                    placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                                                    className={`pr-10 ${!config.zhipu?.apiKey?.trim() ? 'border-destructive' : ''}`}
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                                    onClick={() => setShowApiKey(!showApiKey)}
+                                                >
+                                                    {showApiKey ? (
+                                                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                                    ) : (
+                                                        <Eye className="h-4 w-4 text-muted-foreground" />
+                                                    )}
+                                                </Button>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                从 <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">智谱AI开放平台</a> 获取 API Key
+                                            </p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Base URL (可选)</Label>
+                                            <Input
+                                                value={config.zhipu?.baseUrl || ''}
+                                                onChange={(e) => setConfig(prev => ({ ...prev, zhipu: { ...prev.zhipu, baseUrl: e.target.value } }))}
+                                                placeholder="https://open.bigmodel.cn/api/paas/v4"
+                                            />
+                                        </div>
+                                        <ModelSelector
+                                            provider="zhipu"
+                                            apiKey={config.zhipu?.apiKey}
+                                            baseUrl={config.zhipu?.baseUrl}
+                                            currentModel={config.zhipu?.model}
+                                            onModelChange={(model) => setConfig(prev => ({ ...prev, zhipu: { ...prev.zhipu, model } }))}
+                                        />
+                                        <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
+                                            推荐模型：glm-4v（视觉）或 glm-4（文本）
                                         </div>
                                     </div>
                                 )}

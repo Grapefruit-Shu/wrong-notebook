@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { OpenAIProvider } from '@/lib/ai/openai-provider';
 import { GeminiProvider } from '@/lib/ai/gemini-provider';
 import { AzureOpenAIProvider } from '@/lib/ai/azure-provider';
+import { ZhipuProvider } from '@/lib/ai/zhipu-provider';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('api:ai:test');
@@ -71,7 +72,7 @@ function parseErrorCode(error: unknown): string {
 }
 
 export interface AITestRequest {
-    provider: 'openai' | 'gemini' | 'azure';
+    provider: 'openai' | 'gemini' | 'azure' | 'zhipu';
     apiKey: string;
     baseUrl?: string;
     model?: string;
@@ -158,6 +159,14 @@ export async function POST(request: NextRequest) {
                     visionSupport = true;
                     modelInfo = model || deploymentName;
                 }
+            } else if (provider === 'zhipu') {
+                const zhipu = new ZhipuProvider({ apiKey, baseUrl, model });
+                const result = await zhipu.analyzeImage(TEST_IMAGE_BASE64, TEST_IMAGE_MIME, language);
+                if (result.questionText || result.analysis) {
+                    textSupport = true;
+                    visionSupport = true;
+                    modelInfo = model || 'glm-4v';
+                }
             }
         } catch (error) {
             const errCode = parseErrorCode(error);
@@ -220,6 +229,18 @@ export async function POST(request: NextRequest) {
                     if (result.questionText) {
                         textSupport = true;
                         modelInfo = model || deploymentName;
+                    }
+                } else if (provider === 'zhipu') {
+                    const zhipu = new ZhipuProvider({ apiKey, baseUrl, model });
+                    const result = await zhipu.generateSimilarQuestion(
+                        '1+1=?',
+                        ['基础算术'],
+                        language,
+                        'easy'
+                    );
+                    if (result.questionText) {
+                        textSupport = true;
+                        modelInfo = model || 'glm-4v';
                     }
                 }
             } catch (error) {

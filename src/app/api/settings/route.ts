@@ -25,6 +25,11 @@ export async function POST(req: Request) {
             body.gemini.apiKey = currentConfig.gemini?.apiKey;
         }
 
+        // For Zhipu, preserve original key if masked
+        if (body.zhipu?.apiKey === '********') {
+            body.zhipu.apiKey = currentConfig.zhipu?.apiKey;
+        }
+
         // For OpenAI instances, preserve original keys for masked entries
         if (body.openai?.instances) {
             const currentInstances = currentConfig.openai?.instances || [];

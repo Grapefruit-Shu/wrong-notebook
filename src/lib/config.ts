@@ -16,7 +16,7 @@ export interface OpenAIInstance {
 }
 
 export interface AppConfig {
-    aiProvider: 'gemini' | 'openai' | 'azure';
+    aiProvider: 'gemini' | 'openai' | 'azure' | 'zhipu';
     allowRegistration?: boolean;
     openai?: {
         instances?: OpenAIInstance[];
@@ -33,6 +33,11 @@ export interface AppConfig {
         deploymentName?: string; // 部署名称
         apiVersion?: string;     // API 版本
         model?: string;          // 显示用模型名
+    };
+    zhipu?: {
+        apiKey?: string;
+        baseUrl?: string;
+        model?: string;
     };
     prompts?: {
         analyze?: string;
@@ -88,7 +93,7 @@ function migrateOpenAIConfig(legacy: LegacyOpenAIConfig): AppConfig['openai'] {
 }
 
 const DEFAULT_CONFIG: AppConfig = {
-    aiProvider: (process.env.AI_PROVIDER as 'gemini' | 'openai' | 'azure') || 'gemini',
+    aiProvider: (process.env.AI_PROVIDER as 'gemini' | 'openai' | 'azure' | 'zhipu') || 'gemini',
     allowRegistration: true,
     openai: {
         instances: process.env.OPENAI_API_KEY ? [{
@@ -111,6 +116,11 @@ const DEFAULT_CONFIG: AppConfig = {
         deploymentName: process.env.AZURE_OPENAI_DEPLOYMENT,
         apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
         model: process.env.AZURE_OPENAI_MODEL || 'gpt-4o',
+    },
+    zhipu: {
+        apiKey: process.env.ZHIPU_API_KEY,
+        baseUrl: process.env.ZHIPU_BASE_URL,
+        model: process.env.ZHIPU_MODEL || 'glm-4v',
     },
     prompts: {
         analyze: '',
@@ -151,6 +161,7 @@ export function getAppConfig(): AppConfig {
                 },
                 gemini: { ...DEFAULT_CONFIG.gemini, ...userConfig.gemini },
                 azure: { ...DEFAULT_CONFIG.azure, ...userConfig.azure },
+                zhipu: { ...DEFAULT_CONFIG.zhipu, ...userConfig.zhipu },
                 prompts: { ...DEFAULT_CONFIG.prompts, ...userConfig.prompts },
                 timeouts: { ...DEFAULT_CONFIG.timeouts, ...userConfig.timeouts },
             };
@@ -173,6 +184,7 @@ export function updateAppConfig(newConfig: Partial<AppConfig>) {
         },
         gemini: { ...currentConfig.gemini, ...newConfig.gemini },
         azure: { ...currentConfig.azure, ...newConfig.azure },
+        zhipu: { ...currentConfig.zhipu, ...newConfig.zhipu },
         prompts: { ...currentConfig.prompts, ...newConfig.prompts },
         timeouts: { ...currentConfig.timeouts, ...newConfig.timeouts },
     };

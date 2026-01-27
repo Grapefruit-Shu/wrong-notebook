@@ -107,7 +107,7 @@ export interface OpenAIInstance {
 }
 
 export interface AppConfig {
-    aiProvider: 'gemini' | 'openai' | 'azure';
+    aiProvider: 'gemini' | 'openai' | 'azure' | 'zhipu';
     allowRegistration?: boolean;
     openai?: {
         instances?: OpenAIInstance[];
@@ -124,6 +124,11 @@ export interface AppConfig {
         deploymentName?: string; // 部署名称
         apiVersion?: string;     // API 版本 (如 2024-02-15-preview)
         model?: string;          // 显示用模型名 (如 gpt-4o)
+    };
+    zhipu?: {
+        apiKey?: string;
+        baseUrl?: string;
+        model?: string;
     };
     prompts?: {
         analyze?: string;
