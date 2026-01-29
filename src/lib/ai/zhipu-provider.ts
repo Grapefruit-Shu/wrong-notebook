@@ -1,9 +1,8 @@
 import OpenAI from "openai";
 import { AIService, ParsedQuestion, DifficultyLevel, AIConfig } from "./types";
-import { generateAnalyzePrompt, generateSimilarQuestionPrompt } from './prompts';
+import { generateSimilarQuestionPrompt } from './prompts';
 import { getAppConfig } from '../config';
 import { validateParsedQuestion, safeParseParsedQuestion } from './schema';
-import { getMathTagsFromDB, getTagsFromDB } from './tag-service';
 import { createLogger } from '../logger';
 
 const logger = createLogger('ai:zhipu');
@@ -28,10 +27,9 @@ export class ZhipuProvider implements AIService {
         this.openai = new OpenAI({
             apiKey: apiKey,
             baseURL: baseURL || ZHIPU_DEFAULT_BASE_URL,
-            defaultHeaders: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-            dangerouslyAllowBrowser: true, // 智谱API需要在服务器端使用，但SDK可能需要此选项
+            dangerouslyAllowBrowser: true,
+            timeout: 180000,
+            maxRetries: 2,
         });
 
         this.model = config?.model || ZHIPU_DEFAULT_MODEL;
@@ -126,21 +124,36 @@ export class ZhipuProvider implements AIService {
     async analyzeImage(imageBase64: string, mimeType: string = "image/jpeg", language: 'zh' | 'en' = 'zh', grade?: 7 | 8 | 9 | 10 | 11 | 12 | null, subject?: string | null): Promise<ParsedQuestion> {
         const config = getAppConfig();
 
-        // 从数据库获取各学科标签
-        const prefetchedMathTags = (subject === '数学' || !subject) ? await getMathTagsFromDB(grade || null) : [];
-        const prefetchedPhysicsTags = (subject === '物理' || !subject) ? await getTagsFromDB('physics') : [];
-        const prefetchedChemistryTags = (subject === '化学' || !subject) ? await getTagsFromDB('chemistry') : [];
-        const prefetchedBiologyTags = (subject === '生物' || !subject) ? await getTagsFromDB('biology') : [];
-        const prefetchedEnglishTags = (subject === '英语' || !subject) ? await getTagsFromDB('english') : [];
+        // 为智谱AI使用简化的prompt，避免prompt过长导致响应为空
+        const systemPrompt = `你是一个专业的错题分析助手。请按照以下XML格式输出你的分析：
 
-        const systemPrompt = generateAnalyzePrompt(language, grade, subject, {
-            customTemplate: config.prompts?.analyze,
-            prefetchedMathTags,
-            prefetchedPhysicsTags,
-            prefetchedChemistryTags,
-            prefetchedBiologyTags,
-            prefetchedEnglishTags,
-        });
+<subject>
+学科（数学/物理/化学/生物/英语/语文/历史/地理/政治/其他）
+</subject>
+
+<knowledge_points>
+知识点1, 知识点2
+</knowledge_points>
+
+<requires_image>
+true 或 false
+</requires_image>
+
+<question_text>
+题目文本
+</question_text>
+
+<answer_text>
+答案文本
+</answer_text>
+
+<analysis>
+详细解析（使用简体中文）
+</analysis>
+
+<difficulty>
+easy 或 medium 或 hard 或 harder
+</difficulty>`;
 
         logger.box('🔍 Zhipu AI Image Analysis Request', {
             provider: 'Zhipu AI',
@@ -165,6 +178,10 @@ export class ZhipuProvider implements AIService {
                         role: "user",
                         content: [
                             {
+                                type: "text",
+                                text: "请分析这张图片中的错题"
+                            },
+                            {
                                 type: "image_url",
                                 image_url: {
                                     url: `data:${mimeType};base64,${imageBase64}`,
@@ -173,7 +190,7 @@ export class ZhipuProvider implements AIService {
                         ],
                     },
                 ],
-                max_tokens: 8192,
+                max_tokens: 1024,
             });
 
             logger.box('📦 Full API Response', JSON.stringify(response, null, 2));
@@ -196,9 +213,20 @@ export class ZhipuProvider implements AIService {
             return parsedResult;
 
         } catch (error) {
+            const errorObj = error as any;
             logger.box('❌ Error during AI analysis', {
                 error: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined
+                stack: error instanceof Error ? error.stack : undefined,
+                errorType: typeof error,
+                errorName: error instanceof Error ? error.name : undefined,
+                errorConstructor: error instanceof Error ? error.constructor?.name : undefined,
+                errorKeys: error instanceof Error ? Object.keys(error) : undefined,
+                errorStatus: errorObj.status,
+                errorCause: errorObj.cause,
+                errorCode: errorObj.code,
+                errorParam: errorObj.param,
+                errorTypeField: errorObj.type,
+                errorRequestID: errorObj.requestID
             });
             this.handleError(error);
             throw error;
@@ -231,7 +259,7 @@ export class ZhipuProvider implements AIService {
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt },
                 ],
-                max_tokens: 8192,
+                max_tokens: 1024,
             });
 
             const text = response.choices[0]?.message?.content || "";
@@ -289,7 +317,7 @@ export class ZhipuProvider implements AIService {
                     { role: "system", content: prompt },
                     { role: "user", content: userContent }
                 ],
-                max_tokens: 8192,
+                max_tokens: 1024,
             });
 
             logger.debug({ response: JSON.stringify(response) }, 'Full API response');
@@ -325,34 +353,55 @@ export class ZhipuProvider implements AIService {
 
     private handleError(error: unknown) {
         logger.error({ error }, 'Zhipu AI error');
+        
+        let errorMessage = '';
+        let statusCode = 0;
+        
         if (error instanceof Error) {
-            const msg = error.message.toLowerCase();
-            if (msg.includes('fetch failed') || msg.includes('network') || msg.includes('connect')) {
-                throw new Error("AI_CONNECTION_FAILED");
+            errorMessage = error.message;
+            
+            // 检查 OpenAI SDK 错误对象的结构
+            const errorObj = error as any;
+            if (errorObj.status) {
+                statusCode = errorObj.status;
             }
-            if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('aborted') || msg.includes('408')) {
-                throw new Error("AI_TIMEOUT_ERROR");
-            }
-            if (msg.includes('quota') || msg.includes('额度') || msg.includes('rate limit') || msg.includes('429') || msg.includes('too many')) {
-                throw new Error("AI_QUOTA_EXCEEDED");
-            }
-            if (msg.includes('403') || msg.includes('forbidden') || msg.includes('permission')) {
-                throw new Error("AI_PERMISSION_DENIED");
-            }
-            if (msg.includes('404') || msg.includes('not found') || msg.includes('does not exist')) {
-                throw new Error("AI_NOT_FOUND");
-            }
-            if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('504') ||
-                msg.includes('无可用') || msg.includes('overloaded') || msg.includes('unavailable')) {
-                throw new Error("AI_SERVICE_UNAVAILABLE");
-            }
-            if (msg.includes('invalid json') || msg.includes('parse')) {
-                throw new Error("AI_RESPONSE_ERROR");
-            }
-            if (msg.includes('api key') || msg.includes('unauthorized') || msg.includes('401') || msg.includes('invalid api key') || msg.includes('token')) {
-                throw new Error("AI_AUTH_ERROR");
+            if (errorObj.cause) {
+                errorMessage = errorObj.cause.message || errorMessage;
             }
         }
+        
+        const msg = errorMessage.toLowerCase();
+        
+        // 首先检查状态码
+        if (statusCode === 401 || msg.includes('401') || msg.includes('unauthorized') || msg.includes('invalid api key') || msg.includes('token')) {
+            throw new Error("AI_AUTH_ERROR");
+        }
+        if (statusCode === 403 || msg.includes('403') || msg.includes('forbidden') || msg.includes('permission')) {
+            throw new Error("AI_PERMISSION_DENIED");
+        }
+        if (statusCode === 404 || msg.includes('404') || msg.includes('not found') || msg.includes('does not exist')) {
+            throw new Error("AI_NOT_FOUND");
+        }
+        if (statusCode === 429 || msg.includes('429') || msg.includes('rate limit') || msg.includes('too many') || msg.includes('quota') || msg.includes('额度')) {
+            throw new Error("AI_QUOTA_EXCEEDED");
+        }
+        if (statusCode === 500 || statusCode === 502 || statusCode === 503 || statusCode === 504 ||
+            msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('504') ||
+            msg.includes('无可用') || msg.includes('overloaded') || msg.includes('unavailable')) {
+            throw new Error("AI_SERVICE_UNAVAILABLE");
+        }
+        
+        // 然后检查消息内容
+        if (msg.includes('fetch failed') || msg.includes('network') || msg.includes('connect') || msg.includes('enotfound') || msg.includes('econnrefused') || msg.includes('econnreset')) {
+            throw new Error("AI_CONNECTION_FAILED");
+        }
+        if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('aborted') || msg.includes('408')) {
+            throw new Error("AI_TIMEOUT_ERROR");
+        }
+        if (msg.includes('invalid json') || msg.includes('parse')) {
+            throw new Error("AI_RESPONSE_ERROR");
+        }
+        
         throw new Error("AI_UNKNOWN_ERROR");
     }
 }

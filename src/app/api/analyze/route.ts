@@ -97,14 +97,19 @@ export async function POST(req: Request) {
         const subjectChinese = subjectName ? subjectNameMapping[subjectName] : null;
 
         logger.info({ userGrade, subject: subjectChinese }, 'Calling AI service for image analysis');
+        
         const aiService = getAIService();
+        logger.info({ aiProvider: typeof aiService }, 'AI Service created');
+        
         const analysisResult = await aiService.analyzeImage(imageBase64, mimeType, language, userGrade, subjectChinese);
-
+        
         logger.debug({
             knowledgePointsCount: analysisResult.knowledgePoints?.length,
             knowledgePointsType: typeof analysisResult.knowledgePoints,
             isArray: Array.isArray(analysisResult.knowledgePoints)
         }, 'AI returned knowledge points');
+
+        logger.info('AI analysis successful');
 
         // AI 现在从数据库获取标签列表，返回的标签已经是标准化的，不需要额外处理
         if (!analysisResult.knowledgePoints || analysisResult.knowledgePoints.length === 0) {
@@ -117,7 +122,12 @@ export async function POST(req: Request) {
     } catch (error: any) {
         logger.error({
             error: error.message,
-            stack: error.stack
+            stack: error.stack,
+            errorType: typeof error,
+            errorName: error.name,
+            errorConstructor: error.constructor?.name,
+            errorStatus: error.status,
+            errorCause: error.cause
         }, 'Analysis error occurred');
 
         // 返回具体的错误类型，便于前端显示详细提示
